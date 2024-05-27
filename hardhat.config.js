@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-verify");
+require("hardhat-gas-reporter");
 require("dotenv").config();
 
 const { PRIVATE_KEY, ALCHEMY_SEPOLIA_URL, ETHERSCAN_API_KEY } = process.env;
@@ -18,5 +19,9 @@ module.exports = {
     },
     sourcify: {
         enabled: true,
+    },
+    gasReporter: {
+        currency: "EUR",
+        L1: "ethereum",
     },
 };

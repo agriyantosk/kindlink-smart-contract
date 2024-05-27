@@ -42,11 +42,11 @@ contract Kindlink {
     }
 
     struct ListedFoundation {
-        address foundationOwnerAddress;
-    }
-
-    struct ContractAddress {
         address contractAddress;
+        address foundationOwnerAddress;
+        address foundationCoOwnerAddress;
+        uint256 totalInvolvedParticipants;
+        uint256 endVotingTime;
     }
 
     address private kindlinkAddress;
@@ -54,42 +54,64 @@ contract Kindlink {
     // address is foundationAddress
     mapping(address => ListedFoundation) public foundations;
     // address is contractAddress
+    mapping(address => bool) private isRegisteredAddress;
     mapping(address => mapping(address => VotedFoundation)) public isVoted;
     // first address is EOA, second address is foundationOwnerAddress
     mapping(address => uint256) public totalUsersDonations;
 
     event AddCandidates(
-        address indexed sender,
-        address indexed foundationAddress
+        address indexed from,
+        address indexed foundationOwnerAddress
     );
     event Vote(
-        address indexed sender,
-        address indexed candidateAddress,
+        address indexed from,
+        address indexed candidateOwnerAddress,
         bool vote
     );
     event WithdrawalRequest(
-        address indexed sender,
-        address indexed foundationAddress
+        address indexed from,
+        address indexed contractAddress
     );
-    event ConfirmCandidateApproval(address indexed foundation);
-    event ConfirmCandidateDisapproval(address indexed foundation);
+    event WinsVote(address indexed contractAddress);
+    event LoseVote(address indexed foundationOwnerAddress);
     event Donate(
-        address indexed sender,
-        address indexed foundation,
+        address indexed from,
+        address indexed contractAddress,
         uint256 value
     );
     event Withdrawal(
-        address indexed sender,
-        address indexed foundationAddress,
+        address indexed from,
+        address indexed contractAddress,
         uint256 value
     );
     event ApproveWithdrawal(
-        address indexed sender,
-        address indexed foundationAddress
+        address indexed from,
+        address indexed contractAddress
     );
 
-    constructor() {
+    constructor(
+        address listedFoundationContractAddress,
+        address listedFoundationOwnerAddress,
+        address listedFoundationCoOwnerAddress,
+        address candidateFoundationOwnerAddress,
+        address candidateFoundationCoOwnerAddress
+    ) {
         kindlinkAddress = msg.sender;
+        candidates[candidateFoundationOwnerAddress] = FoundationCandidate(
+            candidateFoundationOwnerAddress,
+            candidateFoundationCoOwnerAddress,
+            block.timestamp + 3 days,
+            0,
+            0,
+            block.timestamp
+        );
+        foundations[listedFoundationContractAddress] = ListedFoundation(
+            listedFoundationContractAddress,
+            listedFoundationOwnerAddress,
+            listedFoundationCoOwnerAddress,
+            8,
+            block.timestamp - 3 days
+        );
     }
 
     // KINDLINK FUNCTIONS
@@ -101,6 +123,19 @@ contract Kindlink {
             foundationOwnerAddress != address(0),
             "Not allowing users to send ether to 0 address"
         );
+        require(
+            foundationCoOwnerAddress != address(0),
+            "Not allowing users to send ether to 0 address"
+        );
+        require(
+            foundationOwnerAddress != foundationCoOwnerAddress,
+            "Cannot submit the same address"
+        );
+        require(
+            !isRegisteredAddress[foundationOwnerAddress] &&
+                !isRegisteredAddress[foundationCoOwnerAddress],
+            "This address has already been registered"
+        );
         candidates[foundationOwnerAddress] = FoundationCandidate(
             foundationOwnerAddress,
             foundationCoOwnerAddress,
@@ -110,6 +145,8 @@ contract Kindlink {
             block.timestamp
         );
 
+        isRegisteredAddress[foundationOwnerAddress] = true;
+        isRegisteredAddress[foundationCoOwnerAddress] = true;
         emit AddCandidates(msg.sender, foundationOwnerAddress);
     }
 
@@ -118,12 +155,12 @@ contract Kindlink {
             foundationOwnerAddress
         ];
         require(
-            totalUsersDonations[msg.sender] >= 1 ether,
-            "You must have a minimal total donations of 1 ETH to be able to contribute in the voting process"
+            candidate.endVotingTime > block.timestamp,
+            "Voting period has ended"
         );
         require(
-            candidate.endVotingTime < block.timestamp,
-            "Voting period has ended"
+            totalUsersDonations[msg.sender] >= 1 ether,
+            "You must have a minimal total donations of 1 ETH to be able to contribute in the voting process"
         );
         require(
             !isVoted[msg.sender][foundationOwnerAddress].isVoted,
@@ -136,7 +173,7 @@ contract Kindlink {
             candidate.noVotes++;
         }
 
-        isVoted[foundationOwnerAddress][msg.sender] = VotedFoundation(
+        isVoted[msg.sender][foundationOwnerAddress] = VotedFoundation(
             foundationOwnerAddress,
             true
         );
@@ -159,33 +196,42 @@ contract Kindlink {
             );
 
             foundations[address(newFoundation)] = ListedFoundation(
-                foundationOwnerAddress
+                address(newFoundation),
+                candidates[foundationOwnerAddress].foundationOwnerAddress,
+                candidates[foundationOwnerAddress].foundationCoOwnerAddress,
+                candidates[foundationOwnerAddress].yesVotes +
+                    candidates[foundationOwnerAddress].noVotes,
+                candidates[foundationOwnerAddress].endVotingTime
             );
 
             delete candidates[foundationOwnerAddress];
 
-            emit ConfirmCandidateApproval(address(newFoundation));
+            emit WinsVote(address(newFoundation));
 
             return address(newFoundation);
         } else {
+            delete isRegisteredAddress[
+                candidates[foundationOwnerAddress].foundationOwnerAddress
+            ];
+            delete isRegisteredAddress[
+                candidates[foundationOwnerAddress].foundationCoOwnerAddress
+            ];
             delete candidates[foundationOwnerAddress];
-            emit ConfirmCandidateDisapproval(foundationOwnerAddress);
+            emit LoseVote(foundationOwnerAddress);
         }
     }
 
-    function donate(address foundationAddress) external payable {
-        ListedFoundation storage foundation = foundations[foundationAddress];
+    function donate(address contractAddress) external payable {
+        ListedFoundation storage foundation = foundations[contractAddress];
         require(
             foundation.foundationOwnerAddress != address(0),
             "Foundation has not been registered"
         );
-        (bool sent, ) = foundation.foundationOwnerAddress.call{
-            value: msg.value
-        }("");
+        (bool sent, ) = contractAddress.call{value: msg.value}("");
         require(sent, "Donation Failed");
         totalUsersDonations[msg.sender] += msg.value;
 
-        emit Donate(msg.sender, foundation.foundationOwnerAddress, msg.value);
+        emit Donate(msg.sender, foundation.contractAddress, msg.value);
     }
 
     // KINDLINK MODIFIER FUNCTION
@@ -212,14 +258,14 @@ contract Kindlink {
     // KINDLINK GETTER FUNCTION
     function getAllCandidatesWithVotes(
         address userAddress,
-        ContractAddress[] calldata contractAddresses
+        address[] calldata contractAddresses
     ) external view returns (FoundationCandidateWithVote[] memory) {
         uint256 numCandidates = contractAddresses.length;
         FoundationCandidateWithVote[]
             memory result = new FoundationCandidateWithVote[](numCandidates);
 
         for (uint256 i = 0; i < numCandidates; i++) {
-            address candidateAddress = contractAddresses[i].contractAddress;
+            address candidateAddress = contractAddresses[i];
 
             require(
                 candidateExists(candidateAddress),
@@ -242,38 +288,38 @@ contract Kindlink {
         return result;
     }
 
-    // KINDLINK DELEGATE FUNCTION TO FOUNDATION
-    function delegateWithdrawal(address foundationAddress) external {
-        ListedFoundation storage foundation = foundations[foundationAddress];
-        FoundationInterface FoundationContract = FoundationInterface(
-            foundationAddress
-        );
-        require(
-            msg.sender == foundation.foundationOwnerAddress,
-            "Function was not called by dedicated withdrawal address"
-        );
-        require(
-            FoundationContract.isRequestWithdrawal(),
-            "There is no withdrawal request yet"
+    function getAllFoundationEndVoteTime(
+        address[] calldata contractAddresses
+    ) external view returns (ListedFoundation[] memory) {
+        uint256 numFoundations = contractAddresses.length;
+        ListedFoundation[] memory result = new ListedFoundation[](
+            numFoundations
         );
 
-        FoundationContract.withdraw();
+        for (uint256 i = 0; i < numFoundations; i++) {
+            address contractAddress = contractAddresses[i];
 
-        emit Withdrawal(
-            msg.sender,
-            foundationAddress,
-            foundationAddress.balance
-        );
+            result[i] = ListedFoundation(
+                contractAddress,
+                foundations[contractAddress].foundationOwnerAddress,
+                foundations[contractAddress].foundationCoOwnerAddress,
+                foundations[contractAddress].totalInvolvedParticipants,
+                foundations[contractAddress].endVotingTime
+            );
+        }
+
+        return result;
     }
 
-    function delegateWithdrawalRequest(
-        address foundationOwnerAddress
-    ) external {
-        ListedFoundation storage foundation = foundations[
-            foundationOwnerAddress
-        ];
+    // KINDLINK DELEGATE FUNCTION TO FOUNDATION
+    function delegateWithdrawalRequest(address contractAddress) external {
+        ListedFoundation storage foundation = foundations[contractAddress];
+        require(
+            foundation.foundationOwnerAddress != address(0),
+            "Foundation is not registered!"
+        );
         FoundationInterface FoundationContract = FoundationInterface(
-            foundationOwnerAddress
+            contractAddress
         );
         require(
             msg.sender == foundation.foundationOwnerAddress,
@@ -282,15 +328,42 @@ contract Kindlink {
 
         FoundationContract.requestWithdrawal();
 
-        emit WithdrawalRequest(msg.sender, foundationOwnerAddress);
+        emit WithdrawalRequest(msg.sender, contractAddress);
     }
 
-    function delegateApprove(address foundationOwnerAddress) external {
-        ListedFoundation storage foundation = foundations[
-            foundationOwnerAddress
-        ];
+    function delegateWithdrawal(address contractAddress) external {
+        ListedFoundation storage foundation = foundations[contractAddress];
+        require(
+            foundation.foundationOwnerAddress != address(0),
+            "Foundation is not registered!"
+        );
         FoundationInterface FoundationContract = FoundationInterface(
-            foundationOwnerAddress
+            contractAddress
+        );
+        require(
+            msg.sender == foundation.foundationOwnerAddress,
+            "Function was not called by dedicated withdrawal address"
+        );
+
+        FoundationContract.withdraw();
+
+        emit Withdrawal(msg.sender, contractAddress, contractAddress.balance);
+    }
+
+    function delegateApprove(address contractAddress) external {
+        ListedFoundation storage foundation = foundations[contractAddress];
+        require(
+            foundation.foundationOwnerAddress != address(0),
+            "Foundation is not registered!"
+        );
+        FoundationInterface FoundationContract = FoundationInterface(
+            contractAddress
+        );
+        require(
+            msg.sender == foundation.foundationOwnerAddress ||
+                msg.sender == foundation.foundationCoOwnerAddress ||
+                msg.sender == kindlinkAddress,
+            "Only foundation stakeholders can approve withdrawal reqeusts."
         );
 
         FoundationContract.approve();
