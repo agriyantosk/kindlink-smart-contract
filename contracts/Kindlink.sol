@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 // Uncomment this line to use console.log
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 import {Foundation} from "./Foundation.sol";
 
@@ -100,7 +100,8 @@ contract Kindlink {
         candidates[candidateFoundationOwnerAddress] = FoundationCandidate(
             candidateFoundationOwnerAddress,
             candidateFoundationCoOwnerAddress,
-            block.timestamp + 3 days,
+            block.timestamp + 5 minutes,
+            // change it back all 5 minutes into 3 days
             0,
             0,
             block.timestamp
@@ -110,7 +111,7 @@ contract Kindlink {
             listedFoundationOwnerAddress,
             listedFoundationCoOwnerAddress,
             8,
-            block.timestamp - 3 days
+            block.timestamp - 5 minutes
         );
     }
 
@@ -139,7 +140,7 @@ contract Kindlink {
         candidates[foundationOwnerAddress] = FoundationCandidate(
             foundationOwnerAddress,
             foundationCoOwnerAddress,
-            block.timestamp + 3 days,
+            block.timestamp + 5 minutes,
             0,
             0,
             block.timestamp

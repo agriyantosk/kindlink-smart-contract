@@ -29,11 +29,11 @@ contract Foundation {
         hasApproved[_foundationCoOnwerAddress] = false;
     }
 
-    function requestWithdrawal() external onlyPlatform {
+    function requestWithdrawal() external onlyOwner {
         isRequestWithdrawal = true;
     }
 
-    function approve(address callerAddress) external onlyPlatform {
+    function approve(address callerAddress) external {
         require(
             isRequestWithdrawal,
             "No withdrawal request available to be approve"
@@ -52,7 +52,7 @@ contract Foundation {
         hasApproved[msg.sender] = true;
     }
 
-    function withdraw() external onlyPlatform {
+    function withdraw() external onlyOwner {
         require(
             approval == approvalRequirement,
             "You haven't met the approval requirements yet"
@@ -64,6 +64,7 @@ contract Foundation {
         hasApproved[kindlinkAddress] = false;
         hasApproved[foundationOwnerAddress] = false;
         hasApproved[foundationCoOnwerAddress] = false;
+        approval = 0;
     }
 
     // FOUNDATION GETTER FUNCTION
@@ -78,10 +79,10 @@ contract Foundation {
             );
     }
 
-    modifier onlyPlatform() {
+    modifier onlyOwner() {
         require(
-            msg.sender == kindlinkAddress,
-            "Withdrawal must be conducted through Kindlink Platform"
+            msg.sender == foundationOwnerAddress,
+            "Function was not called by dedicated withdrawal address"
         );
         _;
     }

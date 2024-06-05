@@ -7,5 +7,5 @@ foundation:
     foundationOwnerAddress: "0x1d4D51F08ab86985533Da9D574A3df68336c485D"
     foundationCoOwnerAddress: "0xE176E8Db59dCd3dD19F69386f8D6431De6Dd5e50"
 
-    npx hardhat ignition deploy ./ignition/modules/Kindlink.js --network sepolia
-    npx hardhat verify --network sepolia 0x3f6b5f592B6fAE2077b14fB0dE550abd42978770 --constructor-args kindlink-argument.js
+    npx hardhat ignition deploy ./ignition/modules/Foundation.js --network sepolia
+    npx hardhat verify --network sepolia 0x4Bb72f71188D1F7bE79AeD104EaD3e8584dC57Aa --constructor-args foundation-argument.js
